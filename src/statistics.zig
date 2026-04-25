@@ -58,7 +58,7 @@ const Repository = struct {
         if (response.status == .ok) {
             const authors = (try std.json.parseFromSliceLeaky(
                 []struct {
-                    author: struct { login: []const u8 },
+                    author: ?struct { login: ?[]const u8 = null } = null,
                     weeks: []struct {
                         a: u32,
                         d: u32,
@@ -70,12 +70,15 @@ const Repository = struct {
             ));
             self.lines_changed = 0;
             for (authors) |o| {
-                if (!std.mem.eql(u8, o.author.login, user)) {
-                    continue;
-                }
-                for (o.weeks) |week| {
-                    self.lines_changed += week.a;
-                    self.lines_changed += week.d;
+                if (o.author) |author| {
+                    if (author.login) |login| {
+                        if (std.mem.eql(u8, login, user)) {
+                            for (o.weeks) |week| {
+                                self.lines_changed += week.a;
+                                self.lines_changed += week.d;
+                            }
+                        }
+                    }
                 }
             }
             std.log.info(
