@@ -288,7 +288,7 @@ fn getReposByYear(
             ),
         },
     );
-    errdefer context.client.allocator.free(response.body);
+    defer context.client.allocator.free(response.body);
     if (response.status != .ok) {
         std.log.err(
             "Failed to get data from {d} ({?s})",
@@ -327,7 +327,6 @@ fn getReposByYear(
         response.body,
         .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
     )).data.viewer.contributionsCollection;
-    context.client.allocator.free(response.body);
     std.log.info(
         "Parsed {d} total repositories from {d}",
         .{ stats.commitContributionsByRepository.len, year },
