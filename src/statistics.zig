@@ -56,7 +56,7 @@ const Repository = struct {
         );
         defer client.allocator.free(response.body);
         if (response.status == .ok) {
-            const authors = std.json.parseFromSliceLeaky(
+            const authors = (try std.json.parseFromSliceLeaky(
                 []struct {
                     author: struct { login: []const u8 },
                     weeks: []struct {
@@ -67,10 +67,7 @@ const Repository = struct {
                 arena.allocator(),
                 response.body,
                 .{ .ignore_unknown_fields = true },
-            ) catch |err| {
-                std.log.err("Contributors parse error for {s}: {any}\nRaw Body: {s}", .{self.name, err, response.body});
-                return error.UnexpectedToken;
-            };
+            ));
             self.lines_changed = 0;
             for (authors) |o| {
                 if (!std.mem.eql(u8, o.author.login, user)) {
@@ -443,15 +440,12 @@ fn getReposByYear(
         );
         defer context.client.allocator.free(response.body);
         if (response.status == .ok) {
-            repository.views = (std.json.parseFromSliceLeaky(
+            repository.views = (try std.json.parseFromSliceLeaky(
                 struct { count: u32 },
                 context.arena.allocator(),
                 response.body,
                 .{ .ignore_unknown_fields = true },
-            ) catch |err| {
-                std.log.err("Views parse error for {s}: {any}\nRaw Body: {s}", .{raw_repo.nameWithOwner, err, response.body});
-                return error.UnexpectedToken;
-            }).count;
+            )).count;
         } else {
             std.log.info(
                 "Failed to get views for {s} ({?s})",
