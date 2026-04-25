@@ -56,3 +56,11 @@ jobs:
         # Force the build to succeed, even if no files were changed
         git commit -m 'Update generated files' || true
         git push --set-upstream origin generated
+
+    - name: Slack Notification (not success)
+      uses: act10ns/slack@v2
+      if: "! success()"
+      continue-on-error: true
+      with:
+        status: ${{ job.status }}
+        webhook-url: ${{ secrets.SLACK_WEBHOOK }}
