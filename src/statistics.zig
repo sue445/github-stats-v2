@@ -299,7 +299,40 @@ fn getReposByYear(
         );
         return error.RequestFailed;
     }
-    const stats = (try std.json.parseFromSliceLeaky(
+    // const stats = (try std.json.parseFromSliceLeaky(
+    //     struct { data: struct { viewer: struct {
+    //         contributionsCollection: struct {
+    //             totalRepositoryContributions: u32,
+    //             totalIssueContributions: u32,
+    //             totalCommitContributions: u32,
+    //             totalPullRequestContributions: u32,
+    //             totalPullRequestReviewContributions: u32,
+    //             commitContributionsByRepository: []struct {
+    //                 repository: struct {
+    //                     nameWithOwner: []const u8,
+    //                     stargazerCount: u32,
+    //                     forkCount: u32,
+    //                     isPrivate: bool,
+    //                     languages: ?struct {
+    //                         edges: ?[]struct {
+    //                             size: u32,
+    //                             node: struct {
+    //                                 name: []const u8,
+    //                                 color: ?[]const u8,
+    //                             },
+    //                         },
+    //                     },
+    //                 },
+    //             },
+    //         },
+    //     } } },
+    //     context.arena.allocator(),
+    //     graphql_body,
+    //     .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
+    // )).data.viewer.contributionsCollection;
+
+    // FIXME: debug log
+    const parsed = std.json.parseFromSliceLeaky(
         struct { data: struct { viewer: struct {
             contributionsCollection: struct {
                 totalRepositoryContributions: u32,
@@ -329,7 +362,14 @@ fn getReposByYear(
         context.arena.allocator(),
         graphql_body,
         .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
-    )).data.viewer.contributionsCollection;
+    ) catch |err| {
+        std.log.err("JSON Parse Error: {any}", .{err});
+        std.log.err("Raw GitHub Response:\n{s}", .{graphql_body});
+        return error.RequestFailed;
+    };
+
+    const stats = parsed.data.viewer.contributionsCollection;
+
     std.log.info(
         "Parsed {d} total repositories from {d}",
         .{ stats.commitContributionsByRepository.len, year },
