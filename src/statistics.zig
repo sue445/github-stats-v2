@@ -58,7 +58,7 @@ const Repository = struct {
         if (response.status == .ok) {
             const authors = (try std.json.parseFromSliceLeaky(
                 []struct {
-                    author: struct { login: []const u8 },
+                    author: ?struct { login: ?[]const u8 = null } = null,
                     weeks: []struct {
                         a: u32,
                         d: u32,
@@ -70,12 +70,15 @@ const Repository = struct {
             ));
             self.lines_changed = 0;
             for (authors) |o| {
-                if (!std.mem.eql(u8, o.author.login, user)) {
-                    continue;
-                }
-                for (o.weeks) |week| {
-                    self.lines_changed += week.a;
-                    self.lines_changed += week.d;
+                if (o.author) |author| {
+                    if (author.login) |login| {
+                        if (std.mem.eql(u8, login, user)) {
+                            for (o.weeks) |week| {
+                                self.lines_changed += week.a;
+                                self.lines_changed += week.d;
+                            }
+                        }
+                    }
                 }
             }
             std.log.info(
@@ -288,7 +291,10 @@ fn getReposByYear(
             ),
         },
     );
-    errdefer context.client.allocator.free(response.body);
+
+    const graphql_body = response.body;
+    defer context.client.allocator.free(graphql_body);
+
     if (response.status != .ok) {
         std.log.err(
             "Failed to get data from {d} ({?s})",
@@ -324,10 +330,9 @@ fn getReposByYear(
             },
         } } },
         context.arena.allocator(),
-        response.body,
+        graphql_body,
         .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
     )).data.viewer.contributionsCollection;
-    context.client.allocator.free(response.body);
     std.log.info(
         "Parsed {d} total repositories from {d}",
         .{ stats.commitContributionsByRepository.len, year },
