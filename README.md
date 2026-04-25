@@ -6,10 +6,10 @@ https://github.community/t/support-theme-context-for-images-in-light-vs-dark-mod
 
 <div align="center">
 <a href="https://github.com/sue445/github-stats">
-<img src="https://github.com/sue445/github-stats/blob/generated/overview.svg#gh-dark-mode-only" />
-<img src="https://github.com/sue445/github-stats/blob/generated/languages.svg#gh-dark-mode-only" />
-<img src="https://github.com/sue445/github-stats/blob/generated/overview.svg#gh-light-mode-only" />
-<img src="https://github.com/sue445/github-stats/blob/generated/languages.svg#gh-light-mode-only" />
+<img src="https://github.com/sue445/github-stats-v2/blob/generated/overview.svg#gh-dark-mode-only" />
+<img src="https://github.com/sue445/github-stats-v2/blob/generated/languages.svg#gh-dark-mode-only" />
+<img src="https://github.com/sue445/github-stats-v2/blob/generated/overview.svg#gh-light-mode-only" />
+<img src="https://github.com/sue445/github-stats-v2/blob/generated/languages.svg#gh-light-mode-only" />
 </a>
 </div>
 
