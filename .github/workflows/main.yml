@@ -45,7 +45,7 @@ jobs:
       env:
         ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         EXCLUDE_REPOS: ${{ secrets.EXCLUDE_REPOS }}
-        EXCLUDE_LANGS: "Perl,Python,PHP,JavaScript,HTML,CSS,C++,C,TeX,Perl 6,Elixir,XSLT,ShaderLab,C#,Roff"
+        EXCLUDE_LANGS: "Perl,Python,PHP,JavaScript,HTML,CSS,C++,C,TeX,Perl 6,Elixir,XSLT,ShaderLab,C#,Roff,PLpgSQL,Gherkin"
         EXCLUDE_PRIVATE: "false"
         DEBUG: "false"
         # TODO: Remove this when they get their API working again
