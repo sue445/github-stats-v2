@@ -58,7 +58,7 @@ const Repository = struct {
         if (response.status == .ok) {
             const authors = (try std.json.parseFromSliceLeaky(
                 []struct {
-                    author: ?struct { login: ?[]const u8 = null } = null,
+                    author: struct { login: []const u8 },
                     weeks: []struct {
                         a: u32,
                         d: u32,
@@ -70,15 +70,12 @@ const Repository = struct {
             ));
             self.lines_changed = 0;
             for (authors) |o| {
-                if (o.author) |author| {
-                    if (author.login) |login| {
-                        if (std.mem.eql(u8, login, user)) {
-                            for (o.weeks) |week| {
-                                self.lines_changed += week.a;
-                                self.lines_changed += week.d;
-                            }
-                        }
-                    }
+                if (!std.mem.eql(u8, o.author.login, user)) {
+                    continue;
+                }
+                for (o.weeks) |week| {
+                    self.lines_changed += week.a;
+                    self.lines_changed += week.d;
                 }
             }
             std.log.info(
@@ -243,7 +240,7 @@ fn getReposByYear(
         "Getting {d} month{s} of data starting from {d}/{d}...",
         .{ months, if (months != 1) "s" else "", start_month + 1, year },
     );
-    var response = try context.client.graphql(
+    const response = try context.client.graphql(
         \\query ($from: DateTime, $to: DateTime) {
         \\  viewer {
         \\    contributionsCollection(from: $from, to: $to) {
@@ -292,10 +289,7 @@ fn getReposByYear(
             ),
         },
     );
-
-    const graphql_body = response.body;
-    defer context.client.allocator.free(graphql_body);
-
+    defer context.client.allocator.free(response.body);
     if (response.status != .ok) {
         std.log.err(
             "Failed to get data from {d} ({?s})",
@@ -331,7 +325,7 @@ fn getReposByYear(
             },
         } } },
         context.arena.allocator(),
-        graphql_body,
+        response.body,
         .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
     )).data.viewer.contributionsCollection;
     std.log.info(
@@ -431,7 +425,7 @@ fn getReposByYear(
             "Getting views for {s}...",
             .{raw_repo.nameWithOwner},
         );
-        response = try context.client.rest(
+        const response2 = try context.client.rest(
             try std.mem.concat(
                 context.arena.allocator(),
                 u8,
@@ -442,18 +436,18 @@ fn getReposByYear(
                 },
             ),
         );
-        defer context.client.allocator.free(response.body);
-        if (response.status == .ok) {
+        defer context.client.allocator.free(response2.body);
+        if (response2.status == .ok) {
             repository.views = (try std.json.parseFromSliceLeaky(
                 struct { count: u32 },
                 context.arena.allocator(),
-                response.body,
+                response2.body,
                 .{ .ignore_unknown_fields = true },
             )).count;
         } else {
             std.log.info(
                 "Failed to get views for {s} ({?s})",
-                .{ raw_repo.nameWithOwner, response.status.phrase() },
+                .{ raw_repo.nameWithOwner, response2.status.phrase() },
             );
         }
 
