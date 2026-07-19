@@ -56,9 +56,10 @@ const Repository = struct {
         );
         defer client.allocator.free(response.body);
         if (response.status == .ok) {
-            const authors = (try std.json.parseFromSliceLeaky(
+            self.lines_changed = 0;
+            const authors = std.json.parseFromSliceLeaky(
                 []struct {
-                    author: ?struct { login: ?[]const u8 = null } = null,
+                    author: struct { login: []const u8 },
                     weeks: []struct {
                         a: u32,
                         d: u32,
@@ -67,18 +68,23 @@ const Repository = struct {
                 arena.allocator(),
                 response.body,
                 .{ .ignore_unknown_fields = true },
-            ));
-            self.lines_changed = 0;
+            ) catch {
+                // TODO: Replace with proper exception propagation when GitHub
+                // gets their shit together and stops breaking this endpoint
+                std.log.info(
+                    "Skipping lines changed by {s} in {s} due to invalid " ++
+                        "response from GitHub.",
+                    .{ user, self.name },
+                );
+                return response.status;
+            };
             for (authors) |o| {
-                if (o.author) |author| {
-                    if (author.login) |login| {
-                        if (std.mem.eql(u8, login, user)) {
-                            for (o.weeks) |week| {
-                                self.lines_changed += week.a;
-                                self.lines_changed += week.d;
-                            }
-                        }
-                    }
+                if (!std.mem.eql(u8, o.author.login, user)) {
+                    continue;
+                }
+                for (o.weeks) |week| {
+                    self.lines_changed += week.a;
+                    self.lines_changed += week.d;
                 }
             }
             std.log.info(
@@ -109,6 +115,7 @@ const Language = struct {
 pub fn init(
     client: *HttpClient,
     allocator: std.mem.Allocator,
+    io: std.Io,
     max_retries: ?usize,
 ) !Statistics {
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -116,7 +123,7 @@ pub fn init(
 
     var self: Statistics = try getRepos(allocator, &arena, client);
     errdefer self.deinit(allocator);
-    try self.getLinesChanged(&arena, client, max_retries);
+    try self.getLinesChanged(&arena, io, client, max_retries);
     return self;
 }
 
@@ -242,7 +249,7 @@ fn getReposByYear(
         "Getting {d} month{s} of data starting from {d}/{d}...",
         .{ months, if (months != 1) "s" else "", start_month + 1, year },
     );
-    var response = try context.client.graphql(
+    const response = try context.client.graphql(
         \\query ($from: DateTime, $to: DateTime) {
         \\  viewer {
         \\    contributionsCollection(from: $from, to: $to) {
@@ -291,10 +298,7 @@ fn getReposByYear(
             ),
         },
     );
-
-    const graphql_body = response.body;
-    defer context.client.allocator.free(graphql_body);
-
+    defer context.client.allocator.free(response.body);
     if (response.status != .ok) {
         std.log.err(
             "Failed to get data from {d} ({?s})",
@@ -330,7 +334,7 @@ fn getReposByYear(
             },
         } } },
         context.arena.allocator(),
-        graphql_body,
+        response.body,
         .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
     )).data.viewer.contributionsCollection;
     std.log.info(
@@ -430,7 +434,7 @@ fn getReposByYear(
             "Getting views for {s}...",
             .{raw_repo.nameWithOwner},
         );
-        response = try context.client.rest(
+        const response2 = try context.client.rest(
             try std.mem.concat(
                 context.arena.allocator(),
                 u8,
@@ -441,18 +445,18 @@ fn getReposByYear(
                 },
             ),
         );
-        defer context.client.allocator.free(response.body);
-        if (response.status == .ok) {
+        defer context.client.allocator.free(response2.body);
+        if (response2.status == .ok) {
             repository.views = (try std.json.parseFromSliceLeaky(
                 struct { count: u32 },
                 context.arena.allocator(),
-                response.body,
+                response2.body,
                 .{ .ignore_unknown_fields = true },
             )).count;
         } else {
             std.log.info(
                 "Failed to get views for {s} ({?s})",
-                .{ raw_repo.nameWithOwner, response.status.phrase() },
+                .{ raw_repo.nameWithOwner, response2.status.phrase() },
             );
         }
 
@@ -551,9 +555,11 @@ fn getRepos(
 fn getLinesChanged(
     self: *Statistics,
     arena: *std.heap.ArenaAllocator,
+    io: std.Io,
     client: *HttpClient,
     max_retries: ?usize,
 ) !void {
+    const allocator = arena.allocator();
     const T = struct {
         repo: *Repository,
         delay: i64,
@@ -564,30 +570,30 @@ fn getLinesChanged(
         pub fn compareFn(_: void, lhs: T, rhs: T) std.math.Order {
             return std.math.order(lhs.timestamp, rhs.timestamp);
         }
-    }.compareFn) = .init(arena.allocator(), {});
-    defer q.deinit();
+    }.compareFn) = .empty;
+    defer q.deinit(allocator);
     for (self.repositories) |*repo| {
         if (repo.lines_changed > 0) {
             continue;
         }
-        try q.add(.{
+        try q.push(allocator, .{
             .repo = repo,
             .delay = 0,
-            .timestamp = std.time.timestamp(),
+            .timestamp = std.Io.Clock.real.now(io).toSeconds(),
             .retries = 0,
         });
     }
-    while (q.count() > 0) {
-        var item = q.remove();
-        const now = std.time.timestamp();
+    while (q.pop()) |_item| {
+        var item = _item;
+        const now = std.Io.Clock.real.now(io).toSeconds();
         if (item.timestamp > now) {
-            const delay: u64 = @intCast(item.timestamp - now);
+            const delay = item.timestamp - now;
             std.log.debug("Sleeping for {d}s. Waiting for {d} repo{s}.", .{
                 delay,
                 q.count() + 1,
                 if (q.count() + 1 != 0) "s" else "",
             });
-            std.Thread.sleep(delay * std.time.ns_per_s);
+            try io.sleep(.fromSeconds(delay), .real);
         }
         switch (try item.repo.getLinesChanged(arena, client, self.user)) {
             .ok => {},
@@ -595,14 +601,16 @@ fn getLinesChanged(
             // locally to compute lines changed
             // https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api?apiVersion=2026-03-10#rate-limit-errors
             .accepted, .forbidden, .too_many_requests => {
-                item.timestamp = std.time.timestamp() + item.delay;
+                item.timestamp =
+                    std.Io.Clock.real.now(io).toSeconds() + item.delay;
                 // Note: this actually works way better with a very short delay,
                 // hence no exponential backoff
-                item.delay = std.crypto.random.intRangeAtMost(i64, 0, 4);
+                const random: std.Random.IoSource = .{ .io = io };
+                item.delay = random.interface().intRangeAtMost(i64, 0, 4);
                 item.retries += 1;
                 if (max_retries) |max| {
                     if (item.retries <= max) {
-                        try q.add(item);
+                        try q.push(allocator, item);
                     } else {
                         std.log.info(
                             "Cloning {s} to get lines changed...",
@@ -610,6 +618,7 @@ fn getLinesChanged(
                         );
                         item.repo.lines_changed = git.getLinesChanged(
                             arena.allocator(),
+                            io,
                             self.user,
                             client.token,
                             item.repo.name,
@@ -626,7 +635,7 @@ fn getLinesChanged(
                         });
                     }
                 } else {
-                    try q.add(item);
+                    try q.push(allocator, item);
                 }
             },
             else => |status| {
