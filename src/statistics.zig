@@ -304,6 +304,13 @@ fn getReposByYear(
             "Failed to get data from {d} ({?s})",
             .{ year, response.status.phrase() },
         );
+        if (response.status == .forbidden) {
+            std.log.warn(
+                "Skipping {d} because GitHub GraphQL returned forbidden.",
+                .{year},
+            );
+            return;
+        }
         return error.RequestFailed;
     }
     const parsed = try std.json.parseFromSliceLeaky(
