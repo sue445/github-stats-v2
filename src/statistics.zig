@@ -309,11 +309,11 @@ fn getReposByYear(
     const stats = (try std.json.parseFromSliceLeaky(
         struct { data: struct { viewer: struct {
             contributionsCollection: struct {
-                totalRepositoryContributions: u32,
-                totalIssueContributions: u32,
-                totalCommitContributions: u32,
-                totalPullRequestContributions: u32,
-                totalPullRequestReviewContributions: u32,
+                totalRepositoryContributions: u32 = 0,
+                totalIssueContributions: u32 = 0,
+                totalCommitContributions: u32 = 0,
+                totalPullRequestContributions: u32 = 0,
+                totalPullRequestReviewContributions: u32 = 0,
                 commitContributionsByRepository: []struct {
                     repository: struct {
                         nameWithOwner: []const u8,
