@@ -304,39 +304,79 @@ fn getReposByYear(
             "Failed to get data from {d} ({?s})",
             .{ year, response.status.phrase() },
         );
+        if (response.status == .forbidden) {
+            std.log.warn(
+                "Skipping {d} because GitHub GraphQL returned forbidden.",
+                .{year},
+            );
+            return;
+        }
         return error.RequestFailed;
     }
-    const stats = (try std.json.parseFromSliceLeaky(
-        struct { data: struct { viewer: struct {
-            contributionsCollection: struct {
-                totalRepositoryContributions: u32,
-                totalIssueContributions: u32,
-                totalCommitContributions: u32,
-                totalPullRequestContributions: u32,
-                totalPullRequestReviewContributions: u32,
-                commitContributionsByRepository: []struct {
-                    repository: struct {
-                        nameWithOwner: []const u8,
-                        stargazerCount: u32,
-                        forkCount: u32,
-                        isPrivate: bool,
-                        languages: ?struct {
-                            edges: ?[]struct {
-                                size: u32,
-                                node: struct {
-                                    name: []const u8,
-                                    color: ?[]const u8,
-                                },
-                            },
-                        },
+    const parsed = try std.json.parseFromSliceLeaky(
+        struct {
+            data: ?struct {
+                viewer: ?struct {
+                    contributionsCollection: ?struct {
+                        totalRepositoryContributions: u32 = 0,
+                        totalIssueContributions: u32 = 0,
+                        totalCommitContributions: u32 = 0,
+                        totalPullRequestContributions: u32 = 0,
+                        totalPullRequestReviewContributions: u32 = 0,
+                        commitContributionsByRepository: []struct {
+                            repository: ?struct {
+                                nameWithOwner: []const u8 = "",
+                                stargazerCount: u32 = 0,
+                                forkCount: u32 = 0,
+                                isPrivate: bool = false,
+                                languages: ?struct {
+                                    edges: ?[]struct {
+                                        size: u32 = 0,
+                                        node: struct {
+                                            name: []const u8 = "",
+                                            color: ?[]const u8 = null,
+                                        } = .{},
+                                    },
+                                } = null,
+                            } = null,
+                        } = &.{},
                     },
                 },
-            },
-        } } },
+            } = null,
+            errors: ?[]struct {
+                message: []const u8 = "",
+            } = null,
+        },
         context.arena.allocator(),
         response.body,
         .{ .ignore_unknown_fields = true, .allocate = .alloc_always },
-    )).data.viewer.contributionsCollection;
+    );
+    if (parsed.errors) |errors| {
+        for (errors) |e| {
+            std.log.warn("GitHub GraphQL error for {d}: {s}", .{ year, e.message });
+        }
+    }
+    const data = if (parsed.data) |value| value else {
+        std.log.warn(
+            "Skipping {d} because GitHub returned no GraphQL data.",
+            .{year},
+        );
+        return;
+    };
+    const viewer = if (data.viewer) |value| value else {
+        std.log.warn(
+            "Skipping {d} because GitHub returned incomplete contributions data.",
+            .{year},
+        );
+        return;
+    };
+    const stats = if (viewer.contributionsCollection) |value| value else {
+        std.log.warn(
+            "Skipping {d} because GitHub returned incomplete contributions data.",
+            .{year},
+        );
+        return;
+    };
     std.log.info(
         "Parsed {d} total repositories from {d}",
         .{ stats.commitContributionsByRepository.len, year },
@@ -378,7 +418,10 @@ fn getReposByYear(
         stats.totalPullRequestReviewContributions;
 
     for (stats.commitContributionsByRepository) |x| {
-        const raw_repo = x.repository;
+        const raw_repo = x.repository orelse {
+            std.log.warn("Skipping a repository entry without repository data.", .{});
+            continue;
+        };
         if (context.seen.get(raw_repo.nameWithOwner) orelse false) {
             std.log.debug(
                 "Skipping {s} (seen)",
