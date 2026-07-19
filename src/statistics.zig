@@ -327,7 +327,7 @@ fn getReposByYear(
                                         size: u32 = 0,
                                         node: struct {
                                             name: []const u8 = "",
-                                            color: ?[]const u8,
+                                            color: ?[]const u8 = null,
                                         } = .{},
                                     },
                                 } = null,
