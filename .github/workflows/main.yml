@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7.0.0
 
-    - uses: mlugg/setup-zig@v2.2.1 # tag
+    - uses: mlugg/setup-zig@v2.2.1
       with:
         version: 0.16.0
 
