@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
-    - uses: mlugg/setup-zig@v2 tag
+    - uses: mlugg/setup-zig@v2 # tag
       with:
         version: 0.16.0
         # I only want to disable the build cache, but don't see a good way to do
