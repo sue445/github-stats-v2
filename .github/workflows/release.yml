@@ -14,9 +14,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@v7.0.1
 
-    - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29  # v2 tag
+    - uses: mlugg/setup-zig@v2.2.1
       with:
         version: 0.16.0
         # I only want to disable the build cache, but don't see a good way to do
